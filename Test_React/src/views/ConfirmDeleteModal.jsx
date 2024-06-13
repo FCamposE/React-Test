@@ -1,4 +1,3 @@
-// src/views/ConfirmDeleteModal.jsx
 import React from 'react';
 
 const ConfirmDeleteModal = ({ product, onClose, onConfirm }) => {

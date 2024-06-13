@@ -52,6 +52,7 @@ const MyOrdersPage = () => {
             <th>Date</th>
             <th># Products</th>
             <th>Final Price</th>
+            <th>Status</th>
             <th>Options</th>
           </tr>
         </thead>
@@ -63,10 +64,10 @@ const MyOrdersPage = () => {
               <td>{order.date}</td>
               <td>{order.numProducts}</td>
               <td>{order.finalPrice}</td>
-              
+              <td>{order.status}</td>
               <td>
-                <button onClick={() => handleEdit(order.id)}>Edit</button>
-                <button onClick={() => {
+                <button disabled={order.status === 'completed'} onClick={() => handleEdit(order.id)}>Edit</button>
+                <button disabled={order.status === 'completed'} onClick={() => {
                   setOrderIdToDelete(order.id); 
                   setShowDeleteConfirmation(true);
                   }}>Delete</button>

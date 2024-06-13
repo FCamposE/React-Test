@@ -1,26 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import OrderController from '../controllers/OrderController';
 import AddProductModal from './AddProductModal';
+import EditProductModal from './EditProductModal';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 const OrderForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const orderController = new OrderController();
 
   const [order, setOrder] = useState({
     orderNumber: '',
     date: '',
     numProducts: 0,
     finalPrice: 0,
-    products: 0
+    status: 'pending',
+    products: []
   });
 
   const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [showEditProductModal, setShowEditProductModal] = useState(false);
   const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
-  //const [productToDelete, setProductToDelete] = useState(null);
+  const [productToEdit, setProductToEdit] = useState(null);
+  const [productToDelete, setProductToDelete] = useState(null);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -35,6 +37,16 @@ const OrderForm = () => {
     };
 
     fetchOrder();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) {
+      const currentDate = new Date().toISOString().slice(0, 10);
+      setOrder((prevOrder) => ({
+        ...prevOrder,
+        date: currentDate,
+      }));
+    }
   }, [id]);
 
   const handleChange = (event) => {
@@ -60,48 +72,73 @@ const OrderForm = () => {
   };
 
   const handleAddProduct = (product) => {
-    //const updatedProducts = [...order.products, product];
+    const totalProductPrice = parseInt(product.quantity, 10) * parseFloat(product.unitPrice);
     const updatedNumProducts = order.numProducts + parseInt(product.quantity);
-    const updatedFinalPrice = order.finalPrice + parseFloat(product.price * product.quantity);
-    console.log(product.price);
-    console.log(product.quantity);
-    console.log(order.finalPrice);
-    console.log((product.price * product.quantity));
-    console.log(order.finalPrice + parseFloat(product.price * product.quantity));
+    const updatedFinalPrice = parseFloat(order.finalPrice) + totalProductPrice;
 
     setOrder((prevOrder) => ({
       ...prevOrder,
-      //products: updatedProducts,
+      products: [...prevOrder.products, product],
       numProducts: updatedNumProducts,
       finalPrice: updatedFinalPrice,
     }));
     setShowAddProductModal(false);
   };
 
-  const handleRemoveProduct = (productId) => {
-    /*const productToRemove = order.products.find(product => product.id === productId);
-    if (productToRemove) {
-      const updatedProducts = order.products.filter(product => product.id !== productId);
-      const updatedNumProducts = order.numProducts - parseInt(productToRemove.quantity);
-      const updatedFinalPrice = order.finalPrice - (parseFloat(productToRemove.price) * parseInt(productToRemove.quantity));
+  const handleEditProduct = (updatedProduct) => {
+    const updatedProducts = order.products.map((product) =>
+      product.productId === updatedProduct.productId ? updatedProduct : product
+    );
 
-      setOrder((prevOrder) => ({
-        ...prevOrder,
-        products: updatedProducts,
-        numProducts: updatedNumProducts,
-        finalPrice: updatedFinalPrice,
-      }));
-    }*/
-    setShowConfirmDeleteModal(false);
+    const updatedNumProducts = updatedProducts.reduce((acc, prod) => acc + prod.quantity, 0);
+    const updatedFinalPrice = updatedProducts.reduce((acc, prod) => acc + prod.quantity * prod.unitPrice, 0);
+
+    setOrder((prevOrder) => ({
+      ...prevOrder,
+      products: updatedProducts,
+      numProducts: updatedNumProducts,
+      finalPrice: updatedFinalPrice,
+    }));
+    setShowEditProductModal(false);
   };
 
-  const handleSaveOrder = async () => {
-    if (id) {
-      await orderController.editOrder(order.id, order);
-    } else {
-      await orderController.createOrder({ ...order, id: Date.now() });
+  const handleDeleteProduct = async (productId) => {
+    try {
+      const response = await axios.delete(`http://localhost:5000/orders/${id}/products/${productId}`);
+
+      if (response.status === 200) {
+        const updatedProducts = order.products.filter((product) => product.productId !== productId);
+        const updatedNumProducts = updatedProducts.reduce((acc, prod) => acc + prod.quantity, 0);
+        const updatedFinalPrice = updatedProducts.reduce((acc, prod) => acc + prod.quantity * prod.unitPrice, 0);
+
+        setOrder((prevOrder) => ({
+          ...prevOrder,
+          products: updatedProducts,
+          numProducts: updatedNumProducts,
+          finalPrice: updatedFinalPrice,
+        }));
+      }
+
+      setShowConfirmDeleteModal(false);
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        console.warn(`Producto con ID ${productId} no encontrado en la base de datos, eliminando del frontend.`);
+
+        const updatedProducts = order.products.filter((product) => product.productId !== productId);
+        const updatedNumProducts = updatedProducts.reduce((acc, prod) => acc + prod.quantity, 0);
+        const updatedFinalPrice = updatedProducts.reduce((acc, prod) => acc + prod.quantity * prod.unitPrice, 0);
+
+        setOrder((prevOrder) => ({
+          ...prevOrder,
+          products: updatedProducts,
+          numProducts: updatedNumProducts,
+          finalPrice: updatedFinalPrice,
+        }));
+      } else {
+        console.error('Error al eliminar el producto:', error);
+      }
+      setShowConfirmDeleteModal(false);
     }
-    navigate('/orders');
   };
 
   return (
@@ -119,16 +156,17 @@ const OrderForm = () => {
         </label>
         <label>
           Date:
-          <input disabled
+          <input
             type="text"
             name="date"
             value={order.date}
             onChange={handleChange}
+            disabled
           />
         </label>
         <label>
           Number of Products:
-          <input disabled
+          <input
             type="number"
             name="numProducts"
             value={order.numProducts}
@@ -137,27 +175,71 @@ const OrderForm = () => {
         </label>
         <label>
           Final Price:
-          <input disabled
+          <input
             type="number"
             name="finalPrice"
             value={order.finalPrice}
             readOnly
           />
         </label>
+        <label>
+          Status:
+          <select name="status" value={order.status} onChange={handleChange}>
+            <option value="pending">Pending</option>
+            <option value="inprogress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+        </label>
         <button type="submit">{id ? 'Update Order' : 'Create Order'}</button>
         <button type="button" onClick={() => setShowAddProductModal(true)}>Add Product</button>
       </form>
+      <h2>Products in this order</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Product Name</th>
+            <th>Unit Price</th>
+            <th>Quantity</th>
+            <th>Total Price</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order.products.map((product) => (
+            <tr key={product.productId}>
+              <td>{product.productId}</td>
+              <td>{product.productName}</td>
+              <td>{product.unitPrice}</td>
+              <td>{product.quantity}</td>
+              <td>{product.unitPrice * product.quantity}</td>
+              <td>
+                <button onClick={() => { setProductToEdit(product); setShowEditProductModal(true); }}>Edit</button>
+                <button onClick={() => { setProductToDelete(product); setShowConfirmDeleteModal(true); }}>Delete</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {showAddProductModal && (
         <AddProductModal
           onClose={() => setShowAddProductModal(false)}
           onAddProduct={handleAddProduct}
+          existingProducts={order.products}
+        />
+      )}
+      {showEditProductModal && (
+        <EditProductModal
+          product={productToEdit}
+          onClose={() => setShowEditProductModal(false)}
+          onEditProduct={handleEditProduct}
         />
       )}
       {showConfirmDeleteModal && (
         <ConfirmDeleteModal
           product={productToDelete}
           onClose={() => setShowConfirmDeleteModal(false)}
-          onConfirm={() => handleRemoveProduct(productToDelete.id)}
+          onConfirm={() => handleDeleteProduct(productToDelete.productId)}
         />
       )}
     </div>
