@@ -1,4 +1,3 @@
-// src/controllers/UserController.js
 import UserModel from '../models/UserModel';
 
 class UserController {
